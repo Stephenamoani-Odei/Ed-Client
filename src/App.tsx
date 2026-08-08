@@ -10,7 +10,11 @@ import supabase from "./config/supabaseClient"
 // is active, the most recently created one wins.
 
 type Screen = 'landing' | 'register' | 'confirming' | 'success'
-type PaymentMethod = 'mtn' | 'telecel' | 'card' | 'airteltigo'
+
+// The fixed mobile money number clients send payment to manually. Change
+// this if the number ever changes — nothing else needs updating.
+const PAYMENT_NUMBER = '0530477575'
+const PAYMENT_ACCOUNT_NAME = 'Isaac Rockson-Ekpe or EdenPlus Education Consult'
 
 // ─── Workshop program (real data from the shared `programs` table) ───────────
 interface WorkshopProgram {
@@ -112,7 +116,7 @@ async function clientGetOrCreate(opts: {
 }
 
 interface PaymentStatusResult {
-  status: 'pending' | 'paid' | 'overdue' | 'not-found'
+  status: 'awaiting_approval' | 'paid' | 'rejected' | 'not-found'
   amount?: number
   name?: string
   email?: string
@@ -120,9 +124,9 @@ interface PaymentStatusResult {
   totalPaid?: number
 }
 
-async function getPaymentStatus(reference: string, programId: string): Promise<PaymentStatusResult> {
+async function getPaymentStatus(paymentId: string): Promise<PaymentStatusResult> {
   const { data, error } = await supabase.functions.invoke('client-payment-status', {
-    body: { reference, programId },
+    body: { paymentId },
   })
   if (error) {
     console.error('client-payment-status invoke error:', error)
@@ -131,55 +135,35 @@ async function getPaymentStatus(reference: string, programId: string): Promise<P
   return data as PaymentStatusResult
 }
 
-// Normalizes a Ghanaian phone number into the MSISDN format MTN MoMo expects
-// (country code, no leading 0, no +, no spaces) — e.g. "024 123 4567" -> "233241234567".
-function toMsisdn(phone: string): string {
-  let digits = phone.replace(/\D/g, '')
-  if (digits.startsWith('0')) digits = '233' + digits.slice(1)
-  else if (!digits.startsWith('233')) digits = '233' + digits
-  return digits
+// Normalizes a Ghanaian phone number for display/records — e.g.
+// "024 123 4567" -> "0241234567".
+function normalizePhone(phone: string): string {
+  return phone.replace(/\D/g, '')
 }
 
-// Asks a Supabase Edge Function to initiate an MTN MoMo "request to pay" —
-// this pushes an approval prompt straight to the customer's phone. Uses the
-// MoMo API subscription key / API user / API key server-side; none of that
-// ever reaches the browser. Also creates the payment row server-side.
-async function initiateMomoPayment(opts: {
+// Submits a client's manual mobile money transfer for the admin to verify
+// and approve. Creates the client record if needed, and logs a payment row
+// with status 'awaiting_approval' — nothing is marked paid until an admin
+// confirms the money actually arrived.
+async function submitManualPayment(opts: {
+  name: string
+  email: string
   phone: string
+  region: string
+  city: string
   amount: number
-  reference: string
-  clientId: string
   programId: string
-  payerMessage?: string
-}): Promise<{ ok: true } | { error: string }> {
-  try {
-    const { data, error } = await supabase.functions.invoke('momo-request-to-pay', {
-      body: {
-        phone: toMsisdn(opts.phone),
-        amount: opts.amount,
-        reference: opts.reference,
-        clientId: opts.clientId,
-        programId: opts.programId,
-        payerMessage: opts.payerMessage ?? 'EdenPlus Workshop registration',
-      },
-    })
-    if (error) {
-      console.error('momo-request-to-pay invoke error:', error)
-      return { error: 'Could not start the MoMo payment. Please try again.' }
-    }
-    if (data?.error) {
-      console.error('momo-request-to-pay returned error:', data.error)
-      return { error: data.error }
-    }
-    return { ok: true }
-  } catch (err) {
-    console.error('momo-request-to-pay exception:', err)
-    return { error: 'Could not reach the payment server. Please try again.' }
+  transactionId: string
+}): Promise<{ clientId: string; paymentId: string }> {
+  const { data, error } = await supabase.functions.invoke('client-submit-payment', {
+    body: opts,
+  })
+  if (error) {
+    console.error('client-submit-payment invoke error:', error)
+    throw new Error('Could not submit your payment. Please try again.')
   }
-}
-
-function generateIdempotencyKey(): string {
-  return `epc-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
+  if (data?.error) throw new Error(data.error)
+  return data as { clientId: string; paymentId: string }
 }
 
 // ─── Success payload shared between screens ───────────────────────────────────
@@ -222,7 +206,7 @@ function NoProgramScreen() {
 
         <footer className="text-center text-[10px] text-gray-400">
           <p>©2026 Copyright, All Right Reserved</p>
-          <p className="text-[#5B2EE8] cursor-pointer hover:underline">Privacy Policy</p>
+          <p className="text-[#5B2EE8] cursor-pointer hover:underline" onClick={onOpenPrivacyPolicy}>Privacy Policy</p>
           <p className="mt-1">Powered by DataLens</p>
         </footer>
       </div>
@@ -231,7 +215,7 @@ function NoProgramScreen() {
 }
 
 // ─── Landing Screen ───────────────────────────────────────────────────────────
-function LandingScreen({ program, onRegister }: { program: WorkshopProgram; onRegister: () => void }) {
+function LandingScreen({ program, onRegister, onOpenPrivacyPolicy }: { program: WorkshopProgram; onRegister: () => void; onOpenPrivacyPolicy: () => void }) {
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-start px-4 py-6 font-sans">
       <div className="w-full max-w-sm">
@@ -274,7 +258,7 @@ function LandingScreen({ program, onRegister }: { program: WorkshopProgram; onRe
         </button>
         <footer className="mt-8 text-center text-[10px] text-gray-400">
           <p>©2026 Copyright, All Right Reserved</p>
-          <p className="text-[#5B2EE8] cursor-pointer hover:underline">Privacy Policy</p>
+          <p className="text-[#5B2EE8] cursor-pointer hover:underline" onClick={onOpenPrivacyPolicy}>Privacy Policy</p>
           <p className="mt-1">Powered by DataLens</p>
         </footer>
       </div>
@@ -310,10 +294,11 @@ function BenefitItem({ text }: { text: string }) {
 
 type RegisterStep = 'form' | 'ticket-verify' | 'payment'
 
-function RegisterScreen({ program, onBack, onAwaitingConfirmation }: {
+function RegisterScreen({ program, onBack, onAwaitingConfirmation, onOpenPrivacyPolicy }: {
   program: WorkshopProgram
   onBack: () => void
   onAwaitingConfirmation: (reference: string) => void
+  onOpenPrivacyPolicy: () => void
 }) {
   const [step, setStep] = useState<RegisterStep>('form')
   const [form, setForm] = useState({ fullName: '', email: '', contact: '', region: '', town: '' })
@@ -328,7 +313,7 @@ function RegisterScreen({ program, onBack, onAwaitingConfirmation }: {
   const [partPayment, setPartPayment] = useState<number | null>(null)
   const [partDropdownOpen, setPartDropdownOpen] = useState(false)
   const [customAmount, setCustomAmount] = useState('')
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('mtn')
+  const [transactionId, setTransactionId] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [isDuplicate, setIsDuplicate] = useState(false)
@@ -415,7 +400,7 @@ function RegisterScreen({ program, onBack, onAwaitingConfirmation }: {
     setStep('payment')
   }
 
-  // ── Step 3: pay ──
+  // ── Step 3: submit for admin approval ──
   const handlePay = useCallback(async () => {
     if (isDuplicate) return
     setError('')
@@ -432,8 +417,12 @@ function RegisterScreen({ program, onBack, onAwaitingConfirmation }: {
       setError('Please select or enter an amount to pay.')
       return
     }
-    if (toMsisdn(form.contact).length !== 12) {
-      setError('Please enter a valid Ghanaian MTN MoMo number (e.g. 024 123 4567).')
+    if (normalizePhone(form.contact).length < 9) {
+      setError('Please enter a valid phone number.')
+      return
+    }
+    if (!transactionId.trim()) {
+      setError(`Please enter the transaction ID from your transfer to ${PAYMENT_NUMBER}.`)
       return
     }
 
@@ -450,30 +439,25 @@ function RegisterScreen({ program, onBack, onAwaitingConfirmation }: {
         programId: program.id,
       })
 
-      const idempotencyKey = result.existingReference ?? generateIdempotencyKey()
-
-      const momoResult = await initiateMomoPayment({
+      const submitResult = await submitManualPayment({
+        name: form.fullName,
+        email: form.email,
         phone: form.contact,
+        region: form.region,
+        city: form.town,
         amount: amountToPay,
-        reference: idempotencyKey,
-        clientId: result.clientId,
         programId: program.id,
+        transactionId: transactionId.trim(),
       })
 
-      if ('error' in momoResult) {
-        setError(momoResult.error)
-        setLoading(false)
-        return
-      }
-
       setLoading(false)
-      onAwaitingConfirmation(idempotencyKey)
+      onAwaitingConfirmation(submitResult.paymentId)
     } catch (err: any) {
-      console.error('Payment error:', err)
+      console.error('Payment submission error:', err)
       setError(err.message ?? 'Something went wrong. Please try again.')
       setLoading(false)
     }
-  }, [form, amountToPay, customAmount, customAmountNum, maxPayable, isDuplicate])
+  }, [form, amountToPay, customAmount, customAmountNum, maxPayable, isDuplicate, transactionId, program.id])
 
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-start px-4 py-6 font-sans">
@@ -685,15 +669,31 @@ function RegisterScreen({ program, onBack, onAwaitingConfirmation }: {
                   </div>
                 </div>
 
-                <div className="mb-5 flex-col items-center text-center justify-center">
-                  <p className="text-xs text-gray-500 mb-2 font-medium padding-top">Payment method</p>
-                  <div className="flex flex-wrap gap-2 justify-center">
-                    <MethodChip
-                     label="MTN" logo={mtnLogo}
-                     bgColor="#FFD600"
-                     selected={paymentMethod === 'mtn'}
-                     onClick={() => setPaymentMethod('mtn')} />
-                  </div>
+                <div className="mb-5 rounded-xl border border-[#c4b5fd] bg-[#F5F3FF] p-4">
+                  <p className="text-xs font-semibold text-gray-700 mb-2">How to pay</p>
+                  <ol className="text-xs text-gray-600 space-y-1.5 leading-relaxed list-decimal list-inside">
+                    <li>
+                      Send <span className="font-semibold text-[#5B2EE8]">₵{amountToPay.toFixed(2)}</span> via Mobile
+                      Money to <span className="font-mono font-bold text-gray-900">{PAYMENT_NUMBER}</span>
+                    </li>
+                    <li>
+                      Confirm the name on your phone shows{' '}
+                      <span className="font-semibold text-gray-900">{PAYMENT_ACCOUNT_NAME}</span> before you send
+                    </li>
+                    <li>Copy the transaction ID from the confirmation SMS you receive</li>
+                    <li>Paste it below and submit — we'll confirm receipt and text you your ticket</li>
+                  </ol>
+                </div>
+
+                <div className="mb-5">
+                  <label className="block text-xs text-gray-600 mb-1 font-medium">Transaction ID</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. TXN123456789"
+                    value={transactionId}
+                    onChange={e => setTransactionId(e.target.value)}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:border-[#5B2EE8] focus:ring-1 focus:ring-[#5B2EE8] transition-colors"
+                  />
                 </div>
               </>
             )}
@@ -712,18 +712,18 @@ function RegisterScreen({ program, onBack, onAwaitingConfirmation }: {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
-                    Processing…
+                    Submitting…
                   </span>
-                ) : 'Pay Now'}
+                ) : 'Submit for Approval'}
               </button>
             )}
-            <p className="text-center text-[10px] text-gray-400 mt-1.5">You'll get a MoMo prompt on your phone to approve</p>
+            <p className="text-center text-[10px] text-gray-400 mt-1.5">We'll verify your transfer and text you once approved</p>
           </>
         )}
 
         <footer className="mt-8 text-center text-[10px] text-gray-400">
           <p>©2026 Copyright, All Right Reserved</p>
-          <p className="text-[#5B2EE8] cursor-pointer hover:underline">Privacy Policy</p>
+          <p className="text-[#5B2EE8] cursor-pointer hover:underline" onClick={onOpenPrivacyPolicy}>Privacy Policy</p>
           <p className="mt-1">Powered by DataLens</p>
         </footer>
       </div>
@@ -733,25 +733,25 @@ function RegisterScreen({ program, onBack, onAwaitingConfirmation }: {
 
 // ─── Confirming Screen ────────────────────────────────────────────────────────
 // Polls the client-payment-status Edge Function, which reads the same
-// `payments` row the momo-callback / momo-poll-pending Edge Functions update
-// after independently verifying with MTN — the browser never marks a
-// payment paid itself.
-const POLL_INTERVAL_MS = 3000
-const POLL_TIMEOUT_MS = 3 * 60 * 1000
+// `payments` row an admin updates from the Approvals page after checking
+// their own mobile money statement — the browser never marks anything paid
+// itself, and there's no third-party payment gateway involved at all.
+const POLL_INTERVAL_MS = 4000
+const POLL_TIMEOUT_MS = 10 * 60 * 1000
 
-function ConfirmingScreen({ reference, program, onConfirmed, onBack }: {
-  reference: string
-  program: WorkshopProgram
+function ConfirmingScreen({ paymentId, onConfirmed, onBack, onOpenPrivacyPolicy }: {
+  paymentId: string
   onConfirmed: (payload: SuccessPayload) => void
   onBack: () => void
+  onOpenPrivacyPolicy: () => void
 }) {
-  const [status, setStatus] = useState<'polling' | 'timed-out' | 'error'>('polling')
+  const [status, setStatus] = useState<'polling' | 'timed-out' | 'rejected' | 'error'>('polling')
   const [checking, setChecking] = useState(false)
 
   const checkStatus = useCallback(async () => {
     setChecking(true)
     try {
-      const result = await getPaymentStatus(reference, program.id)
+      const result = await getPaymentStatus(paymentId)
       if (result.status === 'paid') {
         onConfirmed({
           fullName: result.name ?? '',
@@ -762,13 +762,17 @@ function ConfirmingScreen({ reference, program, onConfirmed, onBack }: {
         })
         return true
       }
+      if (result.status === 'rejected') {
+        setStatus('rejected')
+        return true
+      }
     } catch (err) {
       console.error('Confirming-screen poll error:', err)
     } finally {
       setChecking(false)
     }
     return false
-  }, [reference, program.id, onConfirmed])
+  }, [paymentId, onConfirmed])
 
   useEffect(() => {
     let cancelled = false
@@ -798,10 +802,10 @@ function ConfirmingScreen({ reference, program, onConfirmed, onBack }: {
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-            <h2 className="text-lg font-bold text-gray-900 font-display mb-2">Waiting for MoMo approval…</h2>
+            <h2 className="text-lg font-bold text-gray-900 font-display mb-2">Waiting for approval…</h2>
             <p className="text-gray-500 text-sm leading-relaxed">
-              Check your phone for an MTN MoMo prompt and enter your PIN to approve the payment.
-              This page will update automatically once it's confirmed.
+              We've received your transaction ID and are confirming the transfer.
+              This page will update automatically once an admin approves it — you'll also get an SMS.
             </p>
           </>
         )}
@@ -811,10 +815,10 @@ function ConfirmingScreen({ reference, program, onConfirmed, onBack }: {
             <div className="w-14 h-14 rounded-full bg-amber-50 flex items-center justify-center mx-auto mb-4">
               <span className="text-2xl">⏳</span>
             </div>
-            <h2 className="text-lg font-bold text-gray-900 font-display mb-2">Still waiting on confirmation</h2>
+            <h2 className="text-lg font-bold text-gray-900 font-display mb-2">Still waiting on approval</h2>
             <p className="text-gray-500 text-sm leading-relaxed mb-5">
-              If you approved the MoMo prompt, this can sometimes take a little longer to reflect.
-              You can check again, or come back later — your ticket number will show your balance once it's confirmed.
+              This is taking longer than usual. You'll still get an SMS the moment it's approved —
+              you can check again now, or come back later.
             </p>
             <button
               onClick={async () => { setStatus('polling'); await checkStatus() }}
@@ -823,6 +827,19 @@ function ConfirmingScreen({ reference, program, onConfirmed, onBack }: {
             >
               {checking ? 'Checking…' : 'Check again'}
             </button>
+          </>
+        )}
+
+        {status === 'rejected' && (
+          <>
+            <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
+              <span className="text-2xl">⚠️</span>
+            </div>
+            <h2 className="text-lg font-bold text-gray-900 font-display mb-2">Transaction not confirmed</h2>
+            <p className="text-gray-500 text-sm leading-relaxed mb-5">
+              We couldn't match this transaction ID to a payment received. Please double-check the ID
+              from your SMS confirmation and try registering again, or contact us directly if you believe this is a mistake.
+            </p>
           </>
         )}
 
@@ -885,7 +902,7 @@ function MethodChip({ label, color, textColor, logo, bgColor, selected, onClick 
 }
 
 // ─── Success Screen ───────────────────────────────────────────────────────────
-function SuccessScreen({ program, payload, onBack }: { program: WorkshopProgram; payload: SuccessPayload; onBack: () => void }) {
+function SuccessScreen({ program, payload, onBack, onOpenPrivacyPolicy }: { program: WorkshopProgram; payload: SuccessPayload; onBack: () => void; onOpenPrivacyPolicy: () => void }) {
   const [copied, setCopied] = useState(false)
   const remaining = Math.max(0, program.price - payload.totalPaid)
   const isFullyPaid = remaining <= 0
@@ -958,7 +975,7 @@ function SuccessScreen({ program, payload, onBack }: { program: WorkshopProgram;
 
         <footer className="mt-8 text-center text-[10px] text-gray-400">
           <p>©2026 Copyright, All Right Reserved</p>
-          <p className="text-[#5B2EE8] cursor-pointer hover:underline">Privacy Policy</p>
+          <p className="text-[#5B2EE8] cursor-pointer hover:underline" onClick={onOpenPrivacyPolicy}>Privacy Policy</p>
           <p className="mt-1">Powered by DataLens</p>
         </footer>
       </div>
@@ -983,6 +1000,7 @@ export default function App() {
   const [program, setProgram] = useState<WorkshopProgram | null>(null)
   const [programStatus, setProgramStatus] = useState<'loading' | 'ready' | 'none' | 'error'>('loading')
   const [loadError, setLoadError] = useState('')
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false)
 
   useEffect(() => {
     getWorkshopProgram().then(({ program: p, reason }) => {
@@ -1028,25 +1046,122 @@ export default function App() {
 
   return (
     <div className="font-sans">
-      {screen === 'landing' && <LandingScreen program={program} onRegister={() => setScreen('register')} />}
+      {screen === 'landing' && (
+        <LandingScreen
+          program={program}
+          onRegister={() => setScreen('register')}
+          onOpenPrivacyPolicy={() => setShowPrivacyPolicy(true)}
+        />
+      )}
       {screen === 'register' && (
         <RegisterScreen
           program={program}
           onBack={() => setScreen('landing')}
           onAwaitingConfirmation={handleAwaitingConfirmation}
+          onOpenPrivacyPolicy={() => setShowPrivacyPolicy(true)}
         />
       )}
       {screen === 'confirming' && pendingReference && (
         <ConfirmingScreen
-          reference={pendingReference}
-          program={program}
+          paymentId={pendingReference}
           onConfirmed={handleConfirmed}
           onBack={() => setScreen('landing')}
+          onOpenPrivacyPolicy={() => setShowPrivacyPolicy(true)}
         />
       )}
       {screen === 'success' && successPayload && (
-        <SuccessScreen program={program} payload={successPayload} onBack={() => setScreen('landing')} />
+        <SuccessScreen
+          program={program}
+          payload={successPayload}
+          onBack={() => setScreen('landing')}
+          onOpenPrivacyPolicy={() => setShowPrivacyPolicy(true)}
+        />
       )}
+      {showPrivacyPolicy && <PrivacyPolicyModal onClose={() => setShowPrivacyPolicy(false)} />}
+    </div>
+  )
+}
+
+// ─── Privacy Policy ────────────────────────────────────────────────────────
+function PrivacyPolicyModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-6 shadow-xl sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-900">Privacy Policy</h2>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-full p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="space-y-4 text-sm leading-relaxed text-gray-600">
+          <p>
+            EdenPlus Education Consult collects only what's needed to register you for this program and
+            confirm your payment.
+          </p>
+
+          <div>
+            <p className="font-semibold text-gray-800">What we collect</p>
+            <p>Your full name, email address, phone number, region, and town/city.</p>
+            <p>
+              When you submit a payment: the amount and the mobile money transaction ID you provide,
+              so an admin can verify your transfer.
+            </p>
+          </div>
+
+          <div>
+            <p className="font-semibold text-gray-800">How we use it</p>
+            <p>
+              To register you for the program, verify your payment, generate and send your ticket
+              number, and text you an SMS confirmation once your payment is approved.
+            </p>
+          </div>
+
+          <div>
+            <p className="font-semibold text-gray-800">Who sees your information</p>
+            <p>
+              EdenPlus admins, to confirm your registration and payment. Your phone number is shared
+              with our SMS provider (Wigal) only to deliver your confirmation text — for nothing else.
+              We never sell or share your information with anyone outside of running this program.
+            </p>
+          </div>
+
+          <div>
+            <p className="font-semibold text-gray-800">How it's stored</p>
+            <p>
+              Your data is stored securely with Supabase, with access restricted to authorized EdenPlus
+              admins only.
+            </p>
+          </div>
+
+          <div>
+            <p className="font-semibold text-gray-800">Your rights</p>
+            <p>
+              You can ask us to correct or delete your information at any time by contacting EdenPlus
+              Education Consult directly.
+            </p>
+          </div>
+
+          <p className="text-xs text-gray-400">Last updated August 2026.</p>
+        </div>
+
+        <button
+          onClick={onClose}
+          className="mt-6 w-full rounded-xl bg-[#5B2EE8] py-3 text-sm font-semibold text-white hover:bg-[#4c25c4]"
+        >
+          Close
+        </button>
+      </div>
     </div>
   )
 }
