@@ -206,7 +206,7 @@ function NoProgramScreen() {
 
         <footer className="text-center text-[10px] text-gray-400">
           <p>©2026 Copyright, All Right Reserved</p>
-          <p className="text-[#5B2EE8] cursor-pointer hover:underline" onClick={onOpenPrivacyPolicy}>Privacy Policy</p>
+          <p className="text-[#5B2EE8] cursor-pointer hover:underline">Privacy Policy</p>
           <p className="mt-1">Powered by DataLens</p>
         </footer>
       </div>
@@ -215,21 +215,21 @@ function NoProgramScreen() {
 }
 
 // ─── Landing Screen ───────────────────────────────────────────────────────────
-function LandingScreen({ program, onRegister, onOpenPrivacyPolicy }: { program: WorkshopProgram; onRegister: () => void; onOpenPrivacyPolicy: () => void }) {
+function LandingScreen({ program, onRegister }: { program: WorkshopProgram; onRegister: () => void }) {
   return (
-    <div className="min-h-screen bg-white flex flex-col items-center justify-start px-4 py-6 font-sans">
+    <div className="min-h-screen bg-white flex flex-col items-center justify-start px-4 py-3 font-sans">
       <div className="w-full max-w-sm">
-        <div className="flex justify-center mb-2">
-          <img src={logoImg} alt="EdenPlus Education Consult logo" className="h-20 w-auto object-contain" />
+        <div className="flex justify-center mb-1">
+          <img src={logoImg} alt="EdenPlus Education Consult logo" className="h-14 w-auto object-contain" />
         </div>
-        <div className="text-center mb-5">
+        <div className="text-center mb-3">
           <p className="text-[#5B2EE8] font-bold text-sm tracking-wide font-display uppercase leading-tight">
             EdenPlus Education Consult
           </p>
           <p className="text-gray-500 text-xs mt-0.5">The Cambridge Curriculum Expert</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 mb-5">
+        <div className="grid grid-cols-2 gap-3 mb-3">
           <div className="rounded-xl overflow-hidden bg-gray-100 aspect-[3/4]">
             <img src={mrRockson} alt="Mr. Rockson" className="w-full h-full object-cover object-top" />
           </div>
@@ -238,13 +238,19 @@ function LandingScreen({ program, onRegister, onOpenPrivacyPolicy }: { program: 
           </div>
         </div>
 
-        <div className="space-y-3 mb-6">
+        <div className="space-y-1.5 mb-3">
           <DetailRow icon="🎓" label="Workshop" value={program.name} />
           <DetailRow icon="📍" label="Location" value={program.location ?? 'Venue to be announced'} />
           <DetailRow icon="📅" label="Date" value={formatProgramDate(program.date)} />
         </div>
 
-        <div className="space-y-2 mb-6">
+        {program.description && (
+          <div className="mb-3 rounded-xl bg-gray-50 px-4 py-2.5">
+            <p className="text-gray-700 text-sm leading-relaxed">{program.description}</p>
+          </div>
+        )}
+
+        <div className="space-y-1.5 mb-3">
           <BenefitItem text="Gain practical tools for lesson planning and classroom management." />
           <BenefitItem text="Engage experts to solve sector challenges and drive institutional transformation." />
           <BenefitItem text="Get hands-on, interactive exposure to your specific subject" />
@@ -252,13 +258,13 @@ function LandingScreen({ program, onRegister, onOpenPrivacyPolicy }: { program: 
 
         <button
           onClick={onRegister}
-          className="w-full bg-[#5B2EE8] hover:bg-[#4320C4] active:scale-[0.98] transition-all text-white font-semibold py-3.5 rounded-lg text-sm tracking-wide font-display"
+          className="w-full bg-[#5B2EE8] hover:bg-[#4320C4] active:scale-[0.98] transition-all text-white font-semibold py-3 rounded-lg text-sm tracking-wide font-display"
         >
           Register Now
         </button>
-        <footer className="mt-8 text-center text-[10px] text-gray-400">
+        <footer className="mt-4 text-center text-[10px] text-gray-400">
           <p>©2026 Copyright, All Right Reserved</p>
-          <p className="text-[#5B2EE8] cursor-pointer hover:underline" onClick={onOpenPrivacyPolicy}>Privacy Policy</p>
+          <p className="text-[#5B2EE8] cursor-pointer hover:underline">Privacy Policy</p>
           <p className="mt-1">Powered by DataLens</p>
         </footer>
       </div>
@@ -294,11 +300,10 @@ function BenefitItem({ text }: { text: string }) {
 
 type RegisterStep = 'form' | 'ticket-verify' | 'payment'
 
-function RegisterScreen({ program, onBack, onAwaitingConfirmation, onOpenPrivacyPolicy }: {
+function RegisterScreen({ program, onBack, onAwaitingConfirmation }: {
   program: WorkshopProgram
   onBack: () => void
   onAwaitingConfirmation: (reference: string) => void
-  onOpenPrivacyPolicy: () => void
 }) {
   const [step, setStep] = useState<RegisterStep>('form')
   const [form, setForm] = useState({ fullName: '', email: '', contact: '', region: '', town: '' })
@@ -723,7 +728,7 @@ function RegisterScreen({ program, onBack, onAwaitingConfirmation, onOpenPrivacy
 
         <footer className="mt-8 text-center text-[10px] text-gray-400">
           <p>©2026 Copyright, All Right Reserved</p>
-          <p className="text-[#5B2EE8] cursor-pointer hover:underline" onClick={onOpenPrivacyPolicy}>Privacy Policy</p>
+          <p className="text-[#5B2EE8] cursor-pointer hover:underline">Privacy Policy</p>
           <p className="mt-1">Powered by DataLens</p>
         </footer>
       </div>
@@ -739,11 +744,10 @@ function RegisterScreen({ program, onBack, onAwaitingConfirmation, onOpenPrivacy
 const POLL_INTERVAL_MS = 4000
 const POLL_TIMEOUT_MS = 10 * 60 * 1000
 
-function ConfirmingScreen({ paymentId, onConfirmed, onBack, onOpenPrivacyPolicy }: {
+function ConfirmingScreen({ paymentId, onConfirmed, onBack }: {
   paymentId: string
   onConfirmed: (payload: SuccessPayload) => void
   onBack: () => void
-  onOpenPrivacyPolicy: () => void
 }) {
   const [status, setStatus] = useState<'polling' | 'timed-out' | 'rejected' | 'error'>('polling')
   const [checking, setChecking] = useState(false)
@@ -902,7 +906,7 @@ function MethodChip({ label, color, textColor, logo, bgColor, selected, onClick 
 }
 
 // ─── Success Screen ───────────────────────────────────────────────────────────
-function SuccessScreen({ program, payload, onBack, onOpenPrivacyPolicy }: { program: WorkshopProgram; payload: SuccessPayload; onBack: () => void; onOpenPrivacyPolicy: () => void }) {
+function SuccessScreen({ program, payload, onBack }: { program: WorkshopProgram; payload: SuccessPayload; onBack: () => void }) {
   const [copied, setCopied] = useState(false)
   const remaining = Math.max(0, program.price - payload.totalPaid)
   const isFullyPaid = remaining <= 0
@@ -975,7 +979,7 @@ function SuccessScreen({ program, payload, onBack, onOpenPrivacyPolicy }: { prog
 
         <footer className="mt-8 text-center text-[10px] text-gray-400">
           <p>©2026 Copyright, All Right Reserved</p>
-          <p className="text-[#5B2EE8] cursor-pointer hover:underline" onClick={onOpenPrivacyPolicy}>Privacy Policy</p>
+          <p className="text-[#5B2EE8] cursor-pointer hover:underline">Privacy Policy</p>
           <p className="mt-1">Powered by DataLens</p>
         </footer>
       </div>
@@ -1000,7 +1004,6 @@ export default function App() {
   const [program, setProgram] = useState<WorkshopProgram | null>(null)
   const [programStatus, setProgramStatus] = useState<'loading' | 'ready' | 'none' | 'error'>('loading')
   const [loadError, setLoadError] = useState('')
-  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false)
 
   useEffect(() => {
     getWorkshopProgram().then(({ program: p, reason }) => {
@@ -1046,122 +1049,25 @@ export default function App() {
 
   return (
     <div className="font-sans">
-      {screen === 'landing' && (
-        <LandingScreen
-          program={program}
-          onRegister={() => setScreen('register')}
-          onOpenPrivacyPolicy={() => setShowPrivacyPolicy(true)}
-        />
-      )}
+      {screen === 'landing' && <LandingScreen program={program} onRegister={() => setScreen('register')} />}
       {screen === 'register' && (
         <RegisterScreen
           program={program}
           onBack={() => setScreen('landing')}
           onAwaitingConfirmation={handleAwaitingConfirmation}
-          onOpenPrivacyPolicy={() => setShowPrivacyPolicy(true)}
         />
       )}
       {screen === 'confirming' && pendingReference && (
         <ConfirmingScreen
-          paymentId={pendingReference}
+          reference={pendingReference}
+          program={program}
           onConfirmed={handleConfirmed}
           onBack={() => setScreen('landing')}
-          onOpenPrivacyPolicy={() => setShowPrivacyPolicy(true)}
         />
       )}
       {screen === 'success' && successPayload && (
-        <SuccessScreen
-          program={program}
-          payload={successPayload}
-          onBack={() => setScreen('landing')}
-          onOpenPrivacyPolicy={() => setShowPrivacyPolicy(true)}
-        />
+        <SuccessScreen program={program} payload={successPayload} onBack={() => setScreen('landing')} />
       )}
-      {showPrivacyPolicy && <PrivacyPolicyModal onClose={() => setShowPrivacyPolicy(false)} />}
-    </div>
-  )
-}
-
-// ─── Privacy Policy ────────────────────────────────────────────────────────
-function PrivacyPolicyModal({ onClose }: { onClose: () => void }) {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
-      onClick={onClose}
-    >
-      <div
-        className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-6 shadow-xl sm:rounded-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-gray-900">Privacy Policy</h2>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="rounded-full p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-          >
-            ✕
-          </button>
-        </div>
-
-        <div className="space-y-4 text-sm leading-relaxed text-gray-600">
-          <p>
-            EdenPlus Education Consult collects only what's needed to register you for this program and
-            confirm your payment.
-          </p>
-
-          <div>
-            <p className="font-semibold text-gray-800">What we collect</p>
-            <p>Your full name, email address, phone number, region, and town/city.</p>
-            <p>
-              When you submit a payment: the amount and the mobile money transaction ID you provide,
-              so an admin can verify your transfer.
-            </p>
-          </div>
-
-          <div>
-            <p className="font-semibold text-gray-800">How we use it</p>
-            <p>
-              To register you for the program, verify your payment, generate and send your ticket
-              number, and text you an SMS confirmation once your payment is approved.
-            </p>
-          </div>
-
-          <div>
-            <p className="font-semibold text-gray-800">Who sees your information</p>
-            <p>
-              EdenPlus admins, to confirm your registration and payment. Your phone number is shared
-              with our SMS provider (Wigal) only to deliver your confirmation text — for nothing else.
-              We never sell or share your information with anyone outside of running this program.
-            </p>
-          </div>
-
-          <div>
-            <p className="font-semibold text-gray-800">How it's stored</p>
-            <p>
-              Your data is stored securely with Supabase, with access restricted to authorized EdenPlus
-              admins only.
-            </p>
-          </div>
-
-          <div>
-            <p className="font-semibold text-gray-800">Your rights</p>
-            <p>
-              You can ask us to correct or delete your information at any time by contacting EdenPlus
-              Education Consult directly.
-            </p>
-          </div>
-
-          <p className="text-xs text-gray-400">Last updated August 2026.</p>
-        </div>
-
-        <button
-          onClick={onClose}
-          className="mt-6 w-full rounded-xl bg-[#5B2EE8] py-3 text-sm font-semibold text-white hover:bg-[#4c25c4]"
-        >
-          Close
-        </button>
-      </div>
     </div>
   )
 }
