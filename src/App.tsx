@@ -178,7 +178,93 @@ interface SuccessPayload {
 // ─── No Active Program Screen ─────────────────────────────────────────────────
 // Shown when the fetch to Supabase succeeds but no admin has an active
 // workshop right now — this is a normal, expected state, not an error.
+// ─── Privacy Policy ────────────────────────────────────────────────────────
+function PrivacyPolicyModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-6 shadow-xl sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-900">Privacy Policy</h2>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-full p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="space-y-4 text-sm leading-relaxed text-gray-600">
+          <p>
+            EdenPlus Education Consult collects only what's needed to register you for this program and
+            confirm your payment.
+          </p>
+
+          <div>
+            <p className="font-semibold text-gray-800">What we collect</p>
+            <p>Your full name, email address, phone number, region, and town/city.</p>
+            <p>
+              When you submit a payment: the amount and the mobile money transaction ID you provide,
+              so an admin can verify your transfer.
+            </p>
+          </div>
+
+          <div>
+            <p className="font-semibold text-gray-800">How we use it</p>
+            <p>
+              To register you for the program, verify your payment, generate and send your ticket
+              number, and text you an SMS confirmation once your payment is approved.
+            </p>
+          </div>
+
+          <div>
+            <p className="font-semibold text-gray-800">Who sees your information</p>
+            <p>
+              EdenPlus admins, to confirm your registration and payment. Your phone number is shared
+              with our SMS provider (Wigal) only to deliver your confirmation text — for nothing else.
+              We never sell or share your information with anyone outside of running this program.
+            </p>
+          </div>
+
+          <div>
+            <p className="font-semibold text-gray-800">How it's stored</p>
+            <p>
+              Your data is stored securely with Supabase, with access restricted to authorized EdenPlus
+              admins only.
+            </p>
+          </div>
+
+          <div>
+            <p className="font-semibold text-gray-800">Your rights</p>
+            <p>
+              You can ask us to correct or delete your information at any time by contacting EdenPlus
+              Education Consult directly.
+            </p>
+          </div>
+
+          <p className="text-xs text-gray-400">Last updated August 2026.</p>
+        </div>
+
+        <button
+          onClick={onClose}
+          className="mt-6 w-full rounded-xl bg-[#5B2EE8] py-3 text-sm font-semibold text-white hover:bg-[#4c25c4]"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function NoProgramScreen() {
+  const [showPrivacy, setShowPrivacy] = useState(false)
+
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center px-4 py-10 font-sans">
       <div className="w-full max-w-sm text-center">
@@ -206,16 +292,19 @@ function NoProgramScreen() {
 
         <footer className="text-center text-[10px] text-gray-400">
           <p>©2026 Copyright, All Right Reserved</p>
-          <p className="text-[#5B2EE8] cursor-pointer hover:underline">Privacy Policy</p>
+          <p onClick={() => setShowPrivacy(true)} className="text-[#5B2EE8] cursor-pointer hover:underline">Privacy Policy</p>
           <p className="mt-1">Powered by DataLens</p>
         </footer>
       </div>
+      {showPrivacy && <PrivacyPolicyModal onClose={() => setShowPrivacy(false)} />}
     </div>
   )
 }
 
 // ─── Landing Screen ───────────────────────────────────────────────────────────
 function LandingScreen({ program, onRegister }: { program: WorkshopProgram; onRegister: () => void }) {
+  const [showPrivacy, setShowPrivacy] = useState(false)
+
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-start px-4 py-3 font-sans">
       <div className="w-full max-w-sm">
@@ -264,10 +353,11 @@ function LandingScreen({ program, onRegister }: { program: WorkshopProgram; onRe
         </button>
         <footer className="mt-4 text-center text-[10px] text-gray-400">
           <p>©2026 Copyright, All Right Reserved</p>
-          <p className="text-[#5B2EE8] cursor-pointer hover:underline">Privacy Policy</p>
+          <p onClick={() => setShowPrivacy(true)} className="text-[#5B2EE8] cursor-pointer hover:underline">Privacy Policy</p>
           <p className="mt-1">Powered by DataLens</p>
         </footer>
       </div>
+      {showPrivacy && <PrivacyPolicyModal onClose={() => setShowPrivacy(false)} />}
     </div>
   )
 }
@@ -323,6 +413,7 @@ function RegisterScreen({ program, onBack, onAwaitingConfirmation }: {
   const [error, setError] = useState('')
   const [isDuplicate, setIsDuplicate] = useState(false)
   const [clientId, setClientId] = useState<string | null>(null)
+  const [showPrivacy, setShowPrivacy] = useState(false)
 
   const ticketRef = useRef<HTMLInputElement>(null)
 
@@ -728,10 +819,11 @@ function RegisterScreen({ program, onBack, onAwaitingConfirmation }: {
 
         <footer className="mt-8 text-center text-[10px] text-gray-400">
           <p>©2026 Copyright, All Right Reserved</p>
-          <p className="text-[#5B2EE8] cursor-pointer hover:underline">Privacy Policy</p>
+          <p onClick={() => setShowPrivacy(true)} className="text-[#5B2EE8] cursor-pointer hover:underline">Privacy Policy</p>
           <p className="mt-1">Powered by DataLens</p>
         </footer>
       </div>
+      {showPrivacy && <PrivacyPolicyModal onClose={() => setShowPrivacy(false)} />}
     </div>
   )
 }
@@ -908,6 +1000,7 @@ function MethodChip({ label, color, textColor, logo, bgColor, selected, onClick 
 // ─── Success Screen ───────────────────────────────────────────────────────────
 function SuccessScreen({ program, payload, onBack }: { program: WorkshopProgram; payload: SuccessPayload; onBack: () => void }) {
   const [copied, setCopied] = useState(false)
+  const [showPrivacy, setShowPrivacy] = useState(false)
   const remaining = Math.max(0, program.price - payload.totalPaid)
   const isFullyPaid = remaining <= 0
 
@@ -979,10 +1072,11 @@ function SuccessScreen({ program, payload, onBack }: { program: WorkshopProgram;
 
         <footer className="mt-8 text-center text-[10px] text-gray-400">
           <p>©2026 Copyright, All Right Reserved</p>
-          <p className="text-[#5B2EE8] cursor-pointer hover:underline">Privacy Policy</p>
+          <p onClick={() => setShowPrivacy(true)} className="text-[#5B2EE8] cursor-pointer hover:underline">Privacy Policy</p>
           <p className="mt-1">Powered by DataLens</p>
         </footer>
       </div>
+      {showPrivacy && <PrivacyPolicyModal onClose={() => setShowPrivacy(false)} />}
     </div>
   )
 }
