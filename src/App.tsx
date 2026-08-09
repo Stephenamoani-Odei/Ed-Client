@@ -2,17 +2,12 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import logoImg from '@/imports/LOGO.jpeg'
 import mrRockson from '@/imports/MR.ROCKSON.jpeg'
 import mrsPatricia from '@/imports/MRS.PATRICIA.jpeg'
-import mtnLogo from '@/imports/MTN_Ghana.jpg'
 import supabase from "./config/supabaseClient"
 
-// Whichever program the admin has marked active shows here automatically —
-// no env var to update every time a new workshop is added. If more than one
-// is active, the most recently created one wins.
 
 type Screen = 'landing' | 'register' | 'confirming' | 'success'
 
-// The fixed mobile money number clients send payment to manually. Change
-// this if the number ever changes — nothing else needs updating.
+
 const PAYMENT_NUMBER = '0530477575'
 const PAYMENT_ACCOUNT_NAME = 'Isaac Rockson-Ekpe or EdenPlus Education Consult'
 
@@ -24,20 +19,18 @@ interface WorkshopProgram {
   price: number
   location: string | null
   date: string | null // ISO timestamp
+  duration: string | null
 }
 
 interface ProgramFetchResult {
   program: WorkshopProgram | null
-  // 'none' = fetch worked fine, there's just no active program right now (show the
-  // friendly "come back later" screen). 'error' = the fetch itself failed (show the
-  // generic error/refresh message).
   reason?: 'none' | 'error'
 }
 
 async function getWorkshopProgram(): Promise<ProgramFetchResult> {
   const { data, error } = await supabase
     .from('programs')
-    .select('id, name, description, price, location, date')
+    .select('id, name, description, price, location, date, duration')
     .eq('is_active', true)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -58,6 +51,7 @@ async function getWorkshopProgram(): Promise<ProgramFetchResult> {
       price: Number(data.price),
       location: data.location,
       date: data.date,
+      duration: data.duration,
     },
   }
 }
@@ -68,11 +62,6 @@ function formatProgramDate(iso: string | null): string {
 }
 
 // ─── Client lookup / registration (real data — shared `clients` + `payments`
-// tables, the same ones the EdenPlus admin dashboard reads) ────────────────
-// These never touch the tables directly from the browser — everything goes
-// through small Edge Functions running with the service role, so a visitor
-// can never query every client's contact info directly.
-
 interface LookupResult {
   exists: boolean
   clientId?: string
@@ -330,7 +319,11 @@ function LandingScreen({ program, onRegister }: { program: WorkshopProgram; onRe
         <div className="space-y-1.5 mb-3">
           <DetailRow icon="🎓" label="Workshop" value={program.name} />
           <DetailRow icon="📍" label="Location" value={program.location ?? 'Venue to be announced'} />
-          <DetailRow icon="📅" label="Date" value={formatProgramDate(program.date)} />
+          <DetailRow
+            icon="📅"
+            label="Date"
+            value={[formatProgramDate(program.date), program.duration ? `Duration: ${program.duration}` : null].filter(Boolean).join(' · ')}
+          />
         </div>
 
         {program.description && (
