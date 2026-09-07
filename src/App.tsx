@@ -398,8 +398,7 @@ function RegisterScreen({ program, onBack, onAwaitingConfirmation }: {
   const [ticketVerified, setTicketVerified] = useState(false)
 
   // Payment state
-  const [partPayment, setPartPayment] = useState<number | null>(null)
-  const [partDropdownOpen, setPartDropdownOpen] = useState(false)
+  const [paymentType, setPaymentType] = useState<'full' | 'partial'>('full')
   const [customAmount, setCustomAmount] = useState('')
   const [transactionId, setTransactionId] = useState('')
   const [loading, setLoading] = useState(false)
@@ -417,18 +416,19 @@ function RegisterScreen({ program, onBack, onAwaitingConfirmation }: {
   })
 
   const FULL_AMOUNT = program.price
-  // Dynamic part-payment presets — roughly a quarter, half, and three
-  // quarters of the program price, rounded to the nearest 10.
-  const PART_AMOUNTS = [0.25, 0.5, 0.75].map(f => Math.round((FULL_AMOUNT * f) / 10) * 10)
+  const MIN_PARTIAL = 100
 
   const remaining = existingReg?.exists
     ? Math.max(0, FULL_AMOUNT - (existingReg.totalPaid ?? 0))
     : FULL_AMOUNT
   const maxPayable = ticketVerified ? remaining : FULL_AMOUNT
+  // Partial payment isn't offered when the remaining balance is already at
+  // or below the minimum partial amount — there'd be no valid range left.
+  const partialAllowed = maxPayable > MIN_PARTIAL
   const customAmountNum = parseFloat(customAmount)
-  const amountToPay = customAmount !== '' && !isNaN(customAmountNum)
-    ? customAmountNum
-    : (partPayment ?? (ticketVerified ? remaining : FULL_AMOUNT))
+  const amountToPay = paymentType === 'full'
+    ? maxPayable
+    : (customAmount !== '' && !isNaN(customAmountNum) ? customAmountNum : 0)
 
   // ── Step 1: form submitted ──
   const handleFormNext = async () => {
@@ -494,13 +494,19 @@ function RegisterScreen({ program, onBack, onAwaitingConfirmation }: {
     if (isDuplicate) return
     setError('')
 
-    if (customAmount !== '' && (isNaN(customAmountNum) || customAmountNum <= 0)) {
-      setError('Please enter a valid payment amount.')
-      return
-    }
-    if (customAmount !== '' && customAmountNum > maxPayable) {
-      setError(`Amount cannot exceed your balance of ₵${maxPayable}.`)
-      return
+    if (paymentType === 'partial') {
+      if (customAmount === '' || isNaN(customAmountNum)) {
+        setError('Please enter a payment amount.')
+        return
+      }
+      if (customAmountNum < MIN_PARTIAL) {
+        setError(`Partial payments must be at least ₵${MIN_PARTIAL}.`)
+        return
+      }
+      if (customAmountNum > maxPayable) {
+        setError(`Amount cannot exceed your balance of ₵${maxPayable}.`)
+        return
+      }
     }
     if (amountToPay <= 0) {
       setError('Please select or enter an amount to pay.')
@@ -546,7 +552,7 @@ function RegisterScreen({ program, onBack, onAwaitingConfirmation }: {
       setError(err.message ?? 'Something went wrong. Please try again.')
       setLoading(false)
     }
-  }, [form, amountToPay, customAmount, customAmountNum, maxPayable, isDuplicate, transactionId, program.id])
+  }, [form, amountToPay, paymentType, customAmount, customAmountNum, maxPayable, isDuplicate, transactionId, program.id])
 
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-start px-4 py-6 font-sans">
@@ -700,63 +706,54 @@ function RegisterScreen({ program, onBack, onAwaitingConfirmation }: {
                   )}
                 </div>
 
-                <div className="relative mb-3">
+                <div className={`grid gap-2 mb-4 ${partialAllowed ? 'grid-cols-2' : 'grid-cols-1'}`}>
                   <button
                     type="button"
-                    onClick={() => setPartDropdownOpen(v => !v)}
-                    className="w-full flex items-center justify-between border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-700 bg-white hover:border-[#5B2EE8] transition-colors"
+                    onClick={() => { setPaymentType('full'); setCustomAmount('') }}
+                    className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
+                      paymentType === 'full'
+                        ? 'border-[#5B2EE8] bg-[#EDE9FD] text-[#5B2EE8]'
+                        : 'border-gray-300 text-gray-700 bg-white hover:border-[#5B2EE8]'
+                    }`}
                   >
-                    <span>{partPayment != null && customAmount === '' ? `Part payment — ₵${partPayment}` : 'Part payment (select preset)'}</span>
-                    <svg className={`w-4 h-4 text-gray-400 transition-transform ${partDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                    </svg>
+                    Full payment (₵{maxPayable})
                   </button>
-
-                  {partDropdownOpen && (
-                    <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
-                      <button
-                        onClick={() => { setPartPayment(null); setCustomAmount(''); setPartDropdownOpen(false) }}
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-500 hover:bg-gray-50 border-b border-gray-100"
-                      >
-                        Pay full amount (₵{ticketVerified ? remaining : FULL_AMOUNT})
-                      </button>
-                      {PART_AMOUNTS.map(amount => (
-                        <button
-                          key={amount}
-                          onClick={() => { setPartPayment(amount); setCustomAmount(''); setPartDropdownOpen(false) }}
-                          className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between hover:bg-[#EDE9FD] transition-colors ${partPayment === amount && customAmount === '' ? 'bg-[#EDE9FD] text-[#5B2EE8] font-semibold' : 'text-gray-700'}`}
-                        >
-                          <span>₵{amount} GHS</span>
-                          {partPayment === amount && customAmount === '' && (
-                            <svg className="w-4 h-4 text-[#5B2EE8]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </button>
-                      ))}
-                    </div>
+                  {partialAllowed && (
+                    <button
+                      type="button"
+                      onClick={() => setPaymentType('partial')}
+                      className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
+                        paymentType === 'partial'
+                          ? 'border-[#5B2EE8] bg-[#EDE9FD] text-[#5B2EE8]'
+                          : 'border-gray-300 text-gray-700 bg-white hover:border-[#5B2EE8]'
+                      }`}
+                    >
+                      Partial payment
+                    </button>
                   )}
                 </div>
 
-                <div className="mb-4">
-                  <label className="block text-xs text-gray-600 mb-1 font-medium">
-                    Or enter a custom amount (GHS)
-                    {ticketVerified && <span className="text-gray-400"> · max ₵{remaining}</span>}
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-semibold">₵</span>
-                    <input
-                      type="number"
-                      min="1"
-                      max={maxPayable}
-                      step="0.01"
-                      placeholder={`e.g. ${ticketVerified ? remaining : FULL_AMOUNT}`}
-                      value={customAmount}
-                      onChange={e => { setCustomAmount(e.target.value); setPartPayment(null) }}
-                      className="w-full border border-gray-300 rounded-md pl-7 pr-3 py-2.5 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:border-[#5B2EE8] focus:ring-1 focus:ring-[#5B2EE8] transition-colors"
-                    />
+                {paymentType === 'partial' && (
+                  <div className="mb-4">
+                    <label className="block text-xs text-gray-600 mb-1 font-medium">
+                      Enter amount to pay (GHS)
+                      <span className="text-gray-400"> · min ₵{MIN_PARTIAL}, max ₵{maxPayable}</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-semibold">₵</span>
+                      <input
+                        type="number"
+                        min={MIN_PARTIAL}
+                        max={maxPayable}
+                        step="0.01"
+                        placeholder={`${MIN_PARTIAL} – ${maxPayable}`}
+                        value={customAmount}
+                        onChange={e => setCustomAmount(e.target.value)}
+                        className="w-full border border-gray-300 rounded-md pl-7 pr-3 py-2.5 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:border-[#5B2EE8] focus:ring-1 focus:ring-[#5B2EE8] transition-colors"
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div className="mb-5 rounded-xl border border-[#c4b5fd] bg-[#F5F3FF] p-4">
                   <p className="text-xs font-semibold text-gray-700 mb-2">How to pay</p>
